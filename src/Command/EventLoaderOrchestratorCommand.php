@@ -3,6 +3,7 @@
 namespace App\Command;
 
 use App\Entity\Source;
+use App\Repository\SourceRepository;
 use App\Service\EventLoaderInterface;
 use Doctrine\ORM\EntityManagerInterface;
 use Psr\Log\LoggerInterface;
@@ -30,6 +31,7 @@ class EventLoaderOrchestratorCommand extends Command
      */
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
+        private readonly SourceRepository $sourceRepository,
         private readonly LoggerInterface $logger = new NullLogger(),
         #[AutowireIterator('app.event_loader')] iterable $loaders,
     ) {
@@ -42,20 +44,27 @@ class EventLoaderOrchestratorCommand extends Command
     {
         $this->io = new SymfonyStyle($input, $output);
 
-        $sources = $this->entityManager->getRepository(Source::class)->findAll();
+        while (true) {
+            $source = null;
 
-        if (empty($sources)) {
-            $this->logMessage('No sources found.');
+            $this->entityManager->wrapInTransaction(function () use (&$source): void {
+                $source = $this->sourceRepository->acquireNext();
+                if ($source === null) {
+                    return;
+                }
+                $source->setLockedUntil(new \DateTimeImmutable('+30 seconds'));
+                $this->entityManager->flush();
+            });
 
-            return Command::SUCCESS;
-        }
+            if ($source === null) {
+                break;
+            }
 
-        foreach ($sources as $source) {
             $loader = $this->findLoaderForSource($source);
 
             if ($loader === null) {
                 $this->logMessage(\sprintf('No loader found for source "%s". Skipping.', $source->getName()));
-
+                $this->releaseSource($source);
                 continue;
             }
 
@@ -65,33 +74,31 @@ class EventLoaderOrchestratorCommand extends Command
                 // Wait one second before making the request to avoid rate limits when running more than one loader in parallel
                 sleep(1);
                 $rawEvents = $loader->fetchEvents($source);
+                $source->setLastFetchedAt(new \DateTimeImmutable());
 
                 if (empty($rawEvents)) {
                     $this->logMessage(\sprintf('No new events from source "%s".', $source->getName()), 'info');
+                } else {
+                    $events = $loader->parseEvents($rawEvents);
+                    $source->setNextOffset(array_pop($events)->getExternalId());
+                    $this->releaseSource($source);
 
-                    continue;
+                    foreach ($events as $event) {
+                        $this->entityManager->persist($event);
+                    }
+
+                    $this->io->success(\sprintf('Loaded %d events from source "%s".', \count($events), $source->getName()));
                 }
-
-                $events = $loader->parseEvents($rawEvents);
-
-                foreach ($events as $event) {
-                    $this->entityManager->persist($event);
-                }
-
-                $source->setNextOffset(array_pop($events)->getExternalId());
-                $source->setLastQueried(new \DateTimeImmutable());
-
-                $this->entityManager->persist($source);
-                $this->entityManager->flush();
-
-                $this->io->success(\sprintf('Loaded %d events from source "%s".', \count($events), $source->getName()));
             } catch (\Throwable $e) {
                 $this->logMessage(\sprintf('Error loading events from source "%s": %s', $source->getName(), $e->getMessage()), 'error');
+            } finally {
+                // Always release the lock, even on failure
+                $this->releaseSource($source);
             }
-        }
 
-        // Avoid memory leaks after every run
-        $this->clean();
+            // Avoid memory leaks after every run
+            $this->clean();
+        }
 
         return Command::SUCCESS;
     }
@@ -118,5 +125,14 @@ class EventLoaderOrchestratorCommand extends Command
         $this->io->{$level}($message);
         $this->logger->{$level}($message);
     }
-}
 
+    private function releaseSource(Source $source): void
+    {
+        if ($source->getLockedUntil() === null) {
+            return;
+        }
+        $source->setLockedUntil(null);
+        $this->entityManager->persist($source);
+        $this->entityManager->flush();
+    }
+}

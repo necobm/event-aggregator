@@ -2,10 +2,11 @@
 
 namespace App\Entity;
 
+use App\Repository\SourceRepository;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
 
-#[ORM\Entity]
+#[ORM\Entity(repositoryClass: SourceRepository::class)]
 #[ORM\Table(name: 'source')]
 class Source
 {
@@ -21,7 +22,10 @@ class Source
     private int $nextOffset = 0;
 
     #[ORM\Column(type: Types::DATETIME_IMMUTABLE, nullable: true)]
-    private ?\DateTimeImmutable $lastQueried = null;
+    private ?\DateTimeImmutable $lastFetchedAt = null;
+
+    #[ORM\Column(type: Types::DATETIME_IMMUTABLE, nullable: true)]
+    private ?\DateTimeImmutable $lockedUntil = null;
 
     public function getId(): ?int
     {
@@ -52,14 +56,26 @@ class Source
         return $this;
     }
 
-    public function getLastQueried(): ?\DateTimeImmutable
+    public function getLastFetchedAt(): ?\DateTimeImmutable
     {
-        return $this->lastQueried;
+        return $this->lastFetchedAt;
     }
 
-    public function setLastQueried(?\DateTimeImmutable $lastQueried): self
+    public function setLastFetchedAt(?\DateTimeImmutable $lastFetchedAt): self
     {
-        $this->lastQueried = $lastQueried;
+        $this->lastFetchedAt = $lastFetchedAt;
+
+        return $this;
+    }
+
+    public function getLockedUntil(): ?\DateTimeImmutable
+    {
+        return $this->lockedUntil;
+    }
+
+    public function setLockedUntil(?\DateTimeImmutable $lockedUntil): self
+    {
+        $this->lockedUntil = $lockedUntil;
 
         return $this;
     }
