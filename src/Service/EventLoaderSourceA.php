@@ -13,6 +13,8 @@ readonly class EventLoaderSourceA implements EventLoaderInterface
     ) {
     }
     /**
+     * Fetch events from a given source. A MAX timeout of 30 seconds is configured for each http client
+     * to ensure not surpassing the source's lock max TTL of 60 seconds
      * @inheritDoc
      */
     public function fetchEvents(Source $source): array

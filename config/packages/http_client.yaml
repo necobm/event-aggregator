@@ -11,12 +11,15 @@ framework:
                 base_uri: '%env(SOURCE_A_BASE_URI)%'
                 headers:
                     Accept: 'application/json'
+                timeout: 30
             clientSourceB:
                 base_uri: '%env(SOURCE_B_BASE_URI)%'
                 headers:
                     Accept: 'application/json'
+                timeout: 30
             clientSourceC:
                 base_uri: '%env(SOURCE_C_BASE_URI)%'
                 headers:
                     Accept: 'application/json'
+                timeout: 30
 

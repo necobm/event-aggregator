@@ -16,14 +16,21 @@ class SourceRepository extends ServiceEntityRepository
 
     /**
      * Selects the next available (unlocked) source for processing using a
-     * pessimistic write lock (SELECT ... FOR UPDATE). Must be called inside
-     * an active transaction so the lock is held until the caller commits.
+     * pessimistic write lock (SELECT ... FOR UPDATE).
+     *
+     * Enforces a minimum 200 ms cooldown between consecutive fetches of the
+     * same source
      */
     public function acquireNext(): ?Source
     {
+        $now = new \DateTimeImmutable();
+        $cooldownCutoff = $now->modify('-200 milliseconds');
+
         return $this->createQueryBuilder('s')
             ->where('s.lockedUntil IS NULL OR s.lockedUntil < :now')
-            ->setParameter('now', new \DateTimeImmutable())
+            ->andWhere('s.lastFetchedAt IS NULL OR s.lastFetchedAt < :cooldownCutoff')
+            ->setParameter('now', $now)
+            ->setParameter('cooldownCutoff', $cooldownCutoff)
             ->orderBy('s.lastFetchedAt', 'ASC')
             ->setMaxResults(1)
             ->getQuery()

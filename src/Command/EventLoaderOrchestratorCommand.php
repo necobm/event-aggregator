@@ -21,6 +21,11 @@ use Symfony\Component\DependencyInjection\Attribute\AutowireIterator;
 )]
 class EventLoaderOrchestratorCommand extends Command
 {
+    /**
+     * Max time in seconds a source remains locked to other workers.
+     */
+    private const LOCK_TTL_SECONDS = 60;
+
     /** @var iterable<EventLoaderInterface> */
     private iterable $loaders;
 
@@ -32,8 +37,8 @@ class EventLoaderOrchestratorCommand extends Command
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
         private readonly SourceRepository $sourceRepository,
-        private readonly LoggerInterface $logger = new NullLogger(),
         #[AutowireIterator('app.event_loader')] iterable $loaders,
+        private readonly LoggerInterface $logger = new NullLogger(),
     ) {
         parent::__construct();
 
@@ -52,12 +57,15 @@ class EventLoaderOrchestratorCommand extends Command
                 if ($source === null) {
                     return;
                 }
-                $source->setLockedUntil(new \DateTimeImmutable('+30 seconds'));
+                $source->setLockedUntil(new \DateTimeImmutable('+' . self::LOCK_TTL_SECONDS . ' seconds'));
                 $this->entityManager->flush();
             });
 
             if ($source === null) {
-                break;
+                // No source is currently available (all locked by peers, or none configured).
+                // Back off briefly and retry.
+                sleep(1);
+                continue;
             }
 
             $loader = $this->findLoaderForSource($source);
@@ -71,8 +79,6 @@ class EventLoaderOrchestratorCommand extends Command
             $this->io->info(\sprintf('Fetching events from source "%s" (offset: %d)...', $source->getName(), $source->getNextOffset()));
 
             try {
-                // Wait one second before making the request to avoid rate limits when running more than one loader in parallel
-                sleep(1);
                 $rawEvents = $loader->fetchEvents($source);
                 $source->setLastFetchedAt(new \DateTimeImmutable());
 
@@ -80,14 +86,34 @@ class EventLoaderOrchestratorCommand extends Command
                     $this->logMessage(\sprintf('No new events from source "%s".', $source->getName()), 'info');
                 } else {
                     $events = $loader->parseEvents($rawEvents);
-                    $source->setNextOffset(array_pop($events)->getExternalId());
-                    $this->releaseSource($source);
-
-                    foreach ($events as $event) {
-                        $this->entityManager->persist($event);
+                    if (empty($events)) {
+                        $this->logMessage(\sprintf('Error parsing events from source "%s".', $source->getName()), 'error');
+                        continue;
                     }
 
-                    $this->io->success(\sprintf('Loaded %d events from source "%s".', \count($events), $source->getName()));
+                    $source->setNextOffset(\end($events)->getExternalId());
+                    // Release source immediately to allow other workers fetch the next event batch from it
+                    $this->releaseSource($source);
+
+                    try {
+                        foreach ($events as $event) {
+                            $this->entityManager->persist($event);
+                        }
+                        $this->entityManager->flush();
+
+                        $this->io->success(\sprintf('Loaded %d events from source "%s".', \count($events), $source->getName()));
+                    } catch (\Throwable) {
+                        $this->logMessage(
+                            \sprintf(
+                                'Failed persisting events from source "%s" with the ID range %d - %d.',
+                                $source->getName(),
+                                $events[0]->getExternalId(),
+                                \end($events)->getExternalId()
+                            ),
+                            'error'
+                        );
+                        $this->clean();
+                    }
                 }
             } catch (\Throwable $e) {
                 $this->logMessage(\sprintf('Error loading events from source "%s": %s', $source->getName(), $e->getMessage()), 'error');
