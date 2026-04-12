@@ -19,5 +19,9 @@ services:
     App\:
         resource: '../src/'
 
+    _instanceof:
+        App\Service\EventLoaderInterface:
+            tags: ['app.event_loader']
+
     # add more service definitions when explicit configuration is needed
     # please note that last definitions always *replace* previous ones

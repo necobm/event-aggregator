@@ -30,6 +30,7 @@ RUN apt-get -qq -o Dpkg::Use-Pty=0 update \
  && apt-get -qqy -o Dpkg::Use-Pty=0 autoremove --purge libpq-dev libicu-dev \
  && rm -rf /var/lib/apt/lists/*
 
+ENV COMPOSER_ALLOW_SUPERUSER=1
 ENV COMPOSER_MEMORY_LIMIT=2G
 
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer

@@ -1,0 +1,22 @@
+# yaml-language-server: $schema=../../vendor/symfony/dependency-injection/Loader/schema/services.schema.json
+parameters:
+    env(SOURCE_A_BASE_URI): 'https://api.sourcea.com'
+    env(SOURCE_B_BASE_URI): 'https://api.sourceb.com'
+    env(SOURCE_C_BASE_URI): 'https://api.sourcec.com'
+
+framework:
+    http_client:
+        scoped_clients:
+            clientSourceA:
+                base_uri: '%env(SOURCE_A_BASE_URI)%'
+                headers:
+                    Accept: 'application/json'
+            clientSourceB:
+                base_uri: '%env(SOURCE_B_BASE_URI)%'
+                headers:
+                    Accept: 'application/json'
+            clientSourceC:
+                base_uri: '%env(SOURCE_C_BASE_URI)%'
+                headers:
+                    Accept: 'application/json'
+
