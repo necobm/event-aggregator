@@ -7,10 +7,10 @@ ENV APP_DEBUG=1
 
 RUN apt-get -qq -o Dpkg::Use-Pty=0 update \
  && apt-get -qqy -o Dpkg::Use-Pty=0 install --no-install-recommends \
-      ca-certificates \
       curl \
       git \
       libicu-dev \
+      libicu76 \
       libpq-dev \
       libpq5 \
       unzip \

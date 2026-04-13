@@ -9,6 +9,12 @@ requesting the same event twice over the network.
 
 ---
 
+> **IMPORTANT**
+> This project is form testing and demo purposes only, not ready for production use.
+> Executing the loader worker will throw exceptions because a real database does not exist.
+> For validating the functionality, run the tests (`make test`) which use an in-memory fake 
+> loader and a real PostgreSQL test database.
+
 ## Overview
 
 A single long-running console command (`app:event-loader:run`) coordinates
