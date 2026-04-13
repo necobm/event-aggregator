@@ -12,15 +12,15 @@ framework:
                 base_uri: '%env(SOURCE_A_BASE_URI)%'
                 headers:
                     Accept: 'application/json'
-                timeout: '%env(int:HTTP_CLIENT_TIMEOUT)%'
+                timeout: '%env(float:HTTP_CLIENT_TIMEOUT)%'
             clientSourceB:
                 base_uri: '%env(SOURCE_B_BASE_URI)%'
                 headers:
                     Accept: 'application/json'
-                timeout: '%env(int:HTTP_CLIENT_TIMEOUT)%'
+                timeout: '%env(float:HTTP_CLIENT_TIMEOUT)%'
             clientSourceC:
                 base_uri: '%env(SOURCE_C_BASE_URI)%'
                 headers:
                     Accept: 'application/json'
-                timeout: '%env(int:HTTP_CLIENT_TIMEOUT)%'
+                timeout: '%env(float:HTTP_CLIENT_TIMEOUT)%'
 

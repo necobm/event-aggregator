@@ -11,6 +11,7 @@ use Psr\Log\NullLogger;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
+use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 use Symfony\Component\DependencyInjection\Attribute\AutowireIterator;
@@ -45,11 +46,31 @@ class EventLoaderOrchestratorCommand extends Command
         $this->loaders = $loaders;
     }
 
+    protected function configure(): void
+    {
+        $this->addOption(
+            'max-iterations',
+            null,
+            InputOption::VALUE_REQUIRED,
+            'Stop the orchestrator after N loop iterations (useful for tests or graceful restarts). Runs forever when omitted.',
+        );
+    }
+
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
         $this->io = new SymfonyStyle($input, $output);
 
-        while (true) {
+        $rawMax = $input->getOption('max-iterations');
+        $maxIterations = $rawMax === null ? null : (int) $rawMax;
+        if ($maxIterations !== null && $maxIterations < 1) {
+            $this->io->error('--max-iterations must be a positive integer.');
+
+            return Command::INVALID;
+        }
+
+        $iteration = 0;
+        while ($maxIterations === null || $iteration < $maxIterations) {
+            $iteration++;
             $source = null;
 
             $this->entityManager->wrapInTransaction(function () use (&$source): void {

@@ -25,3 +25,15 @@ services:
 
     # add more service definitions when explicit configuration is needed
     # please note that last definitions always *replace* previous ones
+
+when@test:
+    services:
+        _defaults:
+            autowire: true
+            autoconfigure: true
+
+        # Test double that replaces any HTTP-backed EventLoaderInterface in integration
+        # tests.
+        App\Tests\Fake\InMemoryEventLoader:
+            public: true
+            tags: ['app.event_loader']

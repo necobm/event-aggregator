@@ -1,8 +1,7 @@
-IMAGE     := event-aggregator
-CONTAINER := event-aggregator
-CONTEXT   := .
+SERVICE   := app
+COMPOSE   := docker compose
 
-.PHONY: help up down build shell logs
+.PHONY: help up down build shell logs test
 
 .DEFAULT_GOAL := help
 
@@ -10,39 +9,35 @@ help:
 	@echo ""
 	@echo "Usage: make [target]"
 	@echo ""
-	@echo "  build    Build the Docker image"
-	@echo "  up       Build and start the container (runs composer install on boot)"
-	@echo "  down     Stop and remove the container"
-	@echo "  shell    Open an interactive shell inside the running container"
-	@echo "  logs     Tail the container logs"
+	@echo "  build    Build the app image via docker compose"
+	@echo "  up       Build and start the full stack (app + database)"
+	@echo "  down     Stop and remove the stack (volumes are preserved)"
+	@echo "  shell    Open an interactive shell inside the app container"
+	@echo "  logs     Tail the app container logs"
+	@echo "  test     Run the PHPUnit suite inside the app container"
 	@echo ""
-
-up: build
-	@echo "Starting container..."
-	@docker run -d \
-		--name $(CONTAINER) \
-		--env-file $(CONTEXT)/.env.dev \
-		-v $(PWD)/$(CONTEXT):/app \
-		$(IMAGE) \
-		bash -c "composer install --no-interaction; tail -f /dev/null"
-	@echo ""
-	@echo "  Service is up and running."
-	@echo "  Container : $(CONTAINER)"
-	@echo ""
-	@echo "  Run 'make shell' to open a shell inside the container."
-	@echo "  Run 'make down' to stop and remove it."
 
 build:
-	@echo "Building image $(IMAGE)..."
-	@docker build -t $(IMAGE) $(CONTEXT)
+	@echo "Building stack..."
+	@$(COMPOSE) build
+
+up: build
+	@echo "Starting stack..."
+	@$(COMPOSE) up -d
+	@echo ""
+	@echo "  Stack is up."
+	@echo "  Run 'make shell' to open a shell inside the app container."
+	@echo "  Run 'make down' to stop and remove it."
 
 down:
-	@docker stop $(CONTAINER) 2>/dev/null || true
-	@docker rm   $(CONTAINER) 2>/dev/null || true
-	@echo "Container stopped and removed."
+	@$(COMPOSE) down
+	@echo "Stack stopped."
 
 shell:
-	@docker exec -it $(CONTAINER) bash
+	@$(COMPOSE) exec $(SERVICE) bash
 
 logs:
-	@docker logs -f $(CONTAINER)
+	@$(COMPOSE) logs -f $(SERVICE)
+
+test:
+	@$(COMPOSE) exec $(SERVICE) vendor/bin/phpunit
