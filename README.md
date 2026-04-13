@@ -116,16 +116,71 @@ make build       # rebuild the image after a Dockerfile change
 Once inside the container (`make shell`):
 
 ```bash
-# One-off invocation — runs the orchestrator in its infinite loop
+# Long-running invocation — runs the orchestrator in its infinite loop
 bin/console app:event-loader:run
 ```
 
-To **simulate parallel workers**, open several shells (`make shell` in
-multiple terminals) and run the command in each. Every instance will
-acquire a different source thanks to the pessimistic-lock + `lockedUntil`
-strategy; none will re-request an event already requested by another.
-
 The command runs forever. Stop it with `Ctrl-C`.
+
+### Bounding the loop with `--max-iterations`
+
+Pass `--max-iterations=N` to make the orchestrator perform exactly **N** loop
+iterations and then exit cleanly. Useful for:
+
+- **Integration tests** — the loop has a deterministic stopping point instead of
+  running forever.
+- **Graceful restarts** — schedule a worker to do, e.g., `--max-iterations=10000`
+  and let a process supervisor (systemd, Kubernetes, supervisord) respawn it
+  between batches without sending `SIGTERM` mid-fetch.
+- **Local debugging / smoke checks** — run a single iteration end-to-end:
+
+```bash
+bin/console app:event-loader:run --max-iterations=1
+```
+
+Omit the option to keep the original "run forever" behavior.
+
+---
+
+## Running the tests
+
+The integration test suite exercises `app:event-loader:run` end-to-end against a
+real PostgreSQL test database (so `SELECT ... FOR UPDATE` and the 200 ms
+cooldown filter execute against the real RDBMS), with external HTTP sources
+replaced by an in-memory fake loader.
+
+### One-shot
+
+```bash
+make test
+```
+
+This runs `vendor/bin/phpunit` inside the `app` container.
+
+### What happens under the hood
+
+- **Test database** — `config/packages/doctrine.yaml` already appends a `_test`
+  suffix to the DB name in the `test` env, so tests target `app_test` and never
+  touch the dev `app` database.
+- **Schema reset** — `tests/bootstrap.php` drops and recreates the schema once
+  per phpunit invocation (before any test runs), via `doctrine:schema:drop`
+  and `doctrine:schema:create`.
+- **Per-test isolation** — `dama/doctrine-test-bundle` wraps every test in a
+  single long-lived transaction that is rolled back on teardown, so no rows
+  persist between tests.
+- **No real HTTP** — `tests/Fake/InMemoryEventLoader.php` is registered as an
+  `app.event_loader` only in the `test` env (`config/services.yaml` →
+  `when@test`) and is the loader the tests script per scenario.
+
+### First-time setup
+
+The `app_test` database is created automatically by the bootstrap, but if you
+ever need to do it manually (e.g. after wiping the postgres volume):
+
+```bash
+make shell
+bin/console doctrine:database:create --if-not-exists --env=test
+```
 
 ---
 
@@ -157,6 +212,7 @@ doc/
 
 Dockerfile                                   # PHP 8.4 + opcache + composer
 Makefile                                     # dev-workflow wrapper
+compose.yaml                                 # app + databse services
 
 ```
 
